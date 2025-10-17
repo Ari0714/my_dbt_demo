@@ -1,0 +1,10 @@
+my_demo:
+  outputs:
+    dev:
+      type: spark
+      method: thrift
+      host: x1
+      port: 10000  # Spark默认Thrift端口
+      schema: default
+      cluster_id: 213
+  target: dev
