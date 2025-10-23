@@ -9,4 +9,4 @@ outputs:
     schema: your_schema
     connect_retries: 5
     session_properties:
-      spark.sql.iceberg.schema.autoMerge.enabled=true
+       spark.sql.iceberg.schema.autoMerge.enabled: true
