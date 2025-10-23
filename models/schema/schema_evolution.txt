@@ -1,4 +1,4 @@
-{% do run_query("set spark.databricks.delta.schema.autoMerge.enabled=true") %}
+{% do run_query("set spark.sql.iceberg.schema.autoMerge.enabled=true") %}
 
 
 outputs:
@@ -9,4 +9,4 @@ outputs:
     schema: your_schema
     connect_retries: 5
     session_properties:
-      spark.databricks.delta.schema.autoMerge.enabled: true
+      spark.sql.iceberg.schema.autoMerge.enabled=true
