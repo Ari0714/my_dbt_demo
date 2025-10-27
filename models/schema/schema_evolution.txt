@@ -1,6 +1,21 @@
 {% do run_query("set spark.sql.iceberg.schema.autoMerge.enabled=true") %}
 
 
+your_profile:
+  target: dev
+  outputs:
+    dev:
+      type: spark
+      method: odbc
+      host: your-spark-thrift-server
+      ... # 其他连接配置
+      config:
+        spark.sql.extensions: org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+        spark.sql.catalog.your_catalog.merge-schema-on-write: true
+        spark.sql.catalog.your_catalog.spark.sql.iceberg.merge-schema-on-write.enabled: true
+
+
+
 outputs:
   dev:
     type: spark
