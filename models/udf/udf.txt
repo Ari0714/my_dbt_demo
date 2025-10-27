@@ -1,4 +1,21 @@
 
+
+create function base_analizer as 'com.atguigu.udf.BaseFieldUDF' using jar 'hdfs://hadoop102:9000/user/hive/jars/hivefunction-1.0-SNAPSHOT.jar';
+
+create function base_analizer as 'xxx' using jar 'hdfs://hadoop102:9000/user/hive/jars/hivefunction-1.0-SNAPSHOT.jar';
+
+
+-- macros/register_udf.sql
+{% macro register_udfs() %}
+  CREATE TEMPORARY FUNCTION base_analizer AS 'com.example.udf.BaseAnalizer';
+{% endmacro %}
+
+
+models:
+  my_project:
+    +pre-hook: "{{ register_udfs() }}"
+
+
     <!-- Spark Core -->
         <dependency>
             <groupId>org.apache.spark</groupId>
