@@ -1,0 +1,22 @@
+
+{% macro debug_sql() %}
+{% if execute %}
+    {{ log("Model: " ~ model.name, info=true) }}
+    {{ log("Compiled SQL:", info=true) }}
+    {{ log("=" * 50, info=true) }}
+    {{ log(model.compiled_sql, info=true) }}
+    {{ log("=" * 50, info=true) }}
+{% endif %}
+{% endmacro %}
+
+
+
+-- models/your_model.sql
+{{ debug_sql() }}
+
+SELECT
+    id,
+    name,
+    created_at
+FROM {{ ref('source_table') }}
+
