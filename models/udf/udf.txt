@@ -1,0 +1,70 @@
+
+    <!-- Spark Core -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_2.12</artifactId>
+            <version>${spark.version}</version>
+        </dependency>
+
+        <!-- Spark SQL -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_2.12</artifactId>
+            <version>${spark.version}</version>
+        </dependency>
+
+
+
+// src/main/scala/com/example/LengthUDF.scala
+package com.example
+
+import org.apache.spark.sql.functions.udf
+
+/**
+ * UDF 工具类，包含各种字段长度计算的 UDF
+ */
+object LengthUDF {
+
+  /**
+   * 获取字符串长度的 UDF
+   * 对于 null 值返回 0
+   */
+  val stringLength = udf((input: String) => {
+    if (input == null) 0 else input.length
+  })
+
+  /**
+   * 获取数组长度的 UDF
+   */
+  val arrayLength = udf((input: Seq[Any]) => {
+    if (input == null) 0 else input.length
+  })
+
+  /**
+   * 获取 Map 长度的 UDF
+   */
+  val mapLength = udf((input: Map[String, Any]) => {
+    if (input == null) 0 else input.size
+  })
+
+  /**
+   * 安全获取字符串长度（带默认值）
+   */
+  def safeStringLength(default: Int = 0) = udf((input: String) => {
+    if (input == null) default else input.length
+  })
+
+  /**
+   * 获取字符串长度，如果是空字符串返回 0
+   */
+  val nonEmptyLength = udf((input: String) => {
+    if (input == null || input.trim.isEmpty) 0 else input.trim.length
+  })
+
+  /**
+   * 获取字节长度的 UDF（UTF-8 编码）
+   */
+  val byteLength = udf((input: String) => {
+    if (input == null) 0 else input.getBytes("UTF-8").length
+  })
+}
