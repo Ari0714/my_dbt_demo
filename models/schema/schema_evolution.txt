@@ -1,6 +1,9 @@
 
 
 
+{{ log("DEBUG: columns = " ~ select_with_target_columns(ref('stg_user'), this), info=True) }}
+
+
 
 macros/select_with_target_columns.sql
 {% macro select_with_target_columns(source_relation, target_relation) %}
