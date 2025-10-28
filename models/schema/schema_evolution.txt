@@ -5,6 +5,76 @@
 +pre-hook: "{{ auto_schema_align_prehook() }}"
 
 
+
+{% macro auto_schema_align_prehook() %}
+{# =========================================================
+完全自动 pre-hook + schema 对齐宏
+适用于 Spark + Iceberg
+- 自动开启 merge-schema
+- 打印源表与目标表列差异
+- 不修改模型 SQL
+- 不修改目标表结构
+========================================================= #}
+
+{# 当前模型 relation #}
+{% set model_relation = this %}
+
+{{ log("🔧 Auto Schema Align Pre-Hook for model: " ~ model_relation, info=True) }}
+
+{# 1️⃣ 启用 Spark merge-schema 和 Iceberg 自动迁移 #}
+{% do run_query("SET spark.sql.iceberg.merge-schema=true") %}
+{% do run_query("SET spark.sql.iceberg.schema.auto-migration.enabled=true") %}
+{% do run_query("SET spark.sql.sources.partitionOverwriteMode=dynamic") %}
+
+{# 2️⃣ 获取源表列信息 #}
+{% set src_cols = adapter.get_columns_in_relation(model_relation) %}
+{% if src_cols is none %}
+    {{ log("⚠️ 无法获取源表列信息", info=True) }}
+{% else %}
+    {% set src_names = [] %}
+    {% for col in src_cols %}
+        {% do src_names.append(col.name|string) %}
+    {% endfor %}
+{% endif %}
+
+{# 3️⃣ 获取目标表列信息 #}
+{% set tgt_cols = adapter.get_columns_in_relation(model_relation) %}
+{% if tgt_cols is none %}
+    {{ log("⚠️ 目标表不存在或无法获取列信息，merge-schema 会自动创建表", info=True) }}
+{% else %}
+    {% set tgt_names = [] %}
+    {% for col in tgt_cols %}
+        {% do tgt_names.append(col.name|string) %}
+    {% endfor %}
+
+    {# 4️⃣ 计算缺列和多余列（安全写法，不用 difference、reject） #}
+    {% set missing_cols = [] %}
+    {% for col in tgt_names %}
+        {% if col not in src_names %}
+            {% do missing_cols.append(col) %}
+        {% endif %}
+    {% endfor %}
+
+    {% set extra_cols = [] %}
+    {% for col in src_names %}
+        {% if col not in tgt_names %}
+            {% do extra_cols.append(col) %}
+        {% endif %}
+    {% endfor %}
+
+    {# 5️⃣ 打印日志 #}
+    {% if missing_cols | length > 0 %}
+        {{ log("⚠️ 模型缺少目标列，将写入时自动补 NULL: " ~ (missing_cols | join(', ')), info=True) }}
+    {% endif %}
+    {% if extra_cols | length > 0 %}
+        {{ log("⚠️ 模型存在多余列，将被忽略: " ~ (extra_cols | join(', ')), info=True) }}
+    {% endif %}
+{% endif %}
+
+{% endmacro %}
+
+
+
 macros/auto_schema_align_prehook.sql
 {% macro auto_schema_align_prehook() %}
 {#
