@@ -17,6 +17,7 @@ models:
   +pre-hook:
       - "SET spark.sql.iceberg.merge-schema=true"
       - "SET spark.sql.iceberg.schema.auto-migration.enabled=true"
+      - "{{ log_schema_diff(this.name, 'analytics.user_profile') }}"
 
 
 {% macro log_schema_diff(model_name, target_table) %}
