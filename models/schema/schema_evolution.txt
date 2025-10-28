@@ -2,6 +2,59 @@
 
 
 
+macros/select_with_target_columns.sql
+{% macro select_with_target_columns(source_relation, target_relation) %}
+{# ========================================================
+自动生成 SELECT 列列表：
+- 源表已有列直接使用
+- 目标表缺列自动补 NULL AS col
+- 可用于 dbt 模型替代列列表
+======================================================== #}
+
+{# 获取源表列信息 #}
+{% set src_cols = adapter.get_columns_in_relation(source_relation) %}
+{% if src_cols is none %}
+    {{ exceptions.raise_compiler_error("无法获取源表列: " ~ source_relation) }}
+{% endif %}
+
+{% set src_names = [] %}
+{% for col in src_cols %}
+    {% do src_names.append(col.name|string) %}
+{% endfor %}
+
+{# 获取目标表列信息 #}
+{% set tgt_cols = adapter.get_columns_in_relation(target_relation) %}
+{% if tgt_cols is none %}
+    {{ exceptions.raise_compiler_error("无法获取目标表列: " ~ target_relation) }}
+{% endif %}
+
+{% set tgt_names = [] %}
+{% for col in tgt_cols %}
+    {% do tgt_names.append(col.name|string) %}
+{% endfor %}
+
+{# 生成 SELECT 列列表 #}
+{% set select_list = [] %}
+{% for col in tgt_names %}
+    {% if col in src_names %}
+        {% do select_list.append(col) %}
+    {% else %}
+        {% do select_list.append("NULL AS " ~ col) %}
+    {% endif %}
+{% endfor %}
+
+{{ select_list | join(',\n  ') }}
+{% endmacro %}
+
+-- models/stg_user.sql
+SELECT
+  {{ select_with_target_columns(ref('stg_user'), this) }}
+FROM {{ ref('stg_user') }}
+
+
+
+------
+
 +pre-hook: "{{ auto_schema_align_prehook() }}"
 
 
