@@ -2,6 +2,61 @@
 
 
 
++pre-hook: "{{ auto_schema_align_prehook() }}"
+
+
+macros/auto_schema_align_prehook.sql
+{% macro auto_schema_align_prehook() %}
+{#
+完全自动 pre-hook + schema 对齐宏
+- 使用 Spark + Iceberg merge-schema 自动补缺列
+- 打印日志
+- 不改模型 SQL
+#}
+
+{# 当前模型 relation #}
+{% set model_relation = this %}
+
+{# 启用 Spark merge-schema 和 Iceberg 自动迁移 #}
+{% do run_query("SET spark.sql.iceberg.merge-schema=true") %}
+{% do run_query("SET spark.sql.iceberg.schema.auto-migration.enabled=true") %}
+{% do run_query("SET spark.sql.sources.partitionOverwriteMode=dynamic") %}
+
+{# 打印当前模型 &目标表信息 #}
+{{ log("🔧 Auto Schema Align: " ~ model_relation, info=True) }}
+
+{# 获取源表 columns #}
+{% set src_cols = adapter.get_columns_in_relation(model_relation) %}
+{% if src_cols is none %}
+    {{ log("⚠️ 无法获取源表列信息", info=True) }}
+{% else %}
+    {% set src_names = src_cols | map(attribute='name') | list %}
+{% endif %}
+
+{# 获取目标表 columns（如果表不存在，会返回 None） #}
+{% set tgt_cols = adapter.get_columns_in_relation(model_relation) %}
+{% if tgt_cols is none %}
+    {{ log("⚠️ 目标表不存在或无法获取列信息, merge-schema 会自动创建表", info=True) }}
+{% else %}
+    {% set tgt_names = tgt_cols | map(attribute='name') | list %}
+
+    {# 比较差异 #}
+    {% set missing_cols = tgt_names | difference(src_names) %}
+    {% set extra_cols = src_names | difference(tgt_names) %}
+
+    {% if missing_cols | length > 0 %}
+        {{ log("⚠️ 模型缺少目标列，将写入时自动补 NULL: " ~ (missing_cols | join(', ')), info=True) }}
+    {% endif %}
+    {% if extra_cols | length > 0 %}
+        {{ log("⚠️ 模型存在多余列，将被忽略: " ~ (extra_cols | join(', ')), info=True) }}
+    {% endif %}
+{% endif %}
+{% endmacro %}
+
+
+
+----------
+
 {{ config(
     materialized='incremental',
     options={
