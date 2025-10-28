@@ -1,5 +1,50 @@
 
 
+-- models/my_table.sql
+{{
+  config(
+    materialized='table',
+    pre_hook="
+      CREATE OR REPLACE FUNCTION IF NOT EXISTS my_str_len
+      AS 'com.example.udf.StringLengthUDF'
+    "
+  )
+}}
+
+SELECT
+  name,
+  my_str_len(name) as name_length
+FROM {{ ref('source_table') }}
+
+--
+# dbt_project.yml
+name: 'my_project'
+version: '1.0.0'
+
+models:
+  my_project:
+    +materialized: table
+
+# Spark 特定配置
+vars:
+  # 注册 UDFs
+  spark:
+    session_properties:
+      # 添加包含 UDF 的 JAR
+      spark.sql.extensions: "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
+
+    # 配置 UDF JAR 路径
+    jars:
+      - "/path/to/your-udf-jar-1.0.0.jar"
+
+    # 或者使用 Ivy 坐标
+    # packages:
+    #   - "com.example:my-udf-library:1.0.0"
+
+
+
+
+-------------------------
 create function base_analizer as 'com.atguigu.udf.BaseFieldUDF' using jar 'hdfs://hadoop102:9000/user/hive/jars/hivefunction-1.0-SNAPSHOT.jar';
 
 create function base_analizer as 'xxx' using jar 'hdfs://hadoop102:9000/user/hive/jars/hivefunction-1.0-SNAPSHOT.jar';

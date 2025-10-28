@@ -10,7 +10,7 @@ def model(dbt, session):
     # dbt.config(materialized="table")
 
     # 注册 Python 函数为 Spark UDF
-    session.udf.register("upp", lambda x:str(x).upper(), StringType())
+    session.udf.register("upp2", lambda x:str(x).upper(), StringType())
     # session.udf.register("encrypt_base64", lambda x:str(x).upper(), StringType())
     # session.udf.register("encrypt_sha256", lambda x:str(x).upper(), StringType())
     # session.udf.register("complex_encrypt", lambda x:str(x).upper(), StringType())

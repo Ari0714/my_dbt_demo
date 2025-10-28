@@ -1,3 +1,43 @@
+
+
+
+
+{{ config(
+    materialized='incremental',
+    options={
+        "mergeSchema": "true"
+    }
+) }}
+
+
+models:
+  +file_format: iceberg
+  +options:
+      mergeSchema: true
+  +pre-hook:
+      - "SET spark.sql.iceberg.merge-schema=true"
+      - "SET spark.sql.iceberg.schema.auto-migration.enabled=true"
+
+
+{% macro log_schema_diff(model_name, target_table) %}
+  {% set src_cols = adapter.get_columns_in_relation(this) %}
+  {% set tgt_cols = adapter.get_columns_in_relation(ref(target_table)) %}
+  {% set src_names = src_cols | map(attribute='name') | list %}
+  {% set tgt_names = tgt_cols | map(attribute='name') | list %}
+  {% set missing_cols = tgt_names | difference(src_names) %}
+  {% set extra_cols = src_names | difference(tgt_names) %}
+  {% if missing_cols | length > 0 %}
+    {{ log("⚠️ " ~ model_name ~ " 缺列 (目标表多): " ~ (missing_cols | join(', ')), info=True) }}
+  {% endif %}
+  {% if extra_cols | length > 0 %}
+    {{ log("⚠️ " ~ model_name ~ " 多列 (将忽略): " ~ (extra_cols | join(', ')), info=True) }}
+  {% endif %}
+{% endmacro %}
+
+
+
+-----------------
+
 {% do run_query("set spark.sql.iceberg.schema.autoMerge.enabled=true") %}
 
 
@@ -13,8 +53,6 @@ your_profile:
         spark.sql.extensions: org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
         spark.sql.catalog.your_catalog.merge-schema-on-write: true
         spark.sql.catalog.your_catalog.spark.sql.iceberg.merge-schema-on-write.enabled: true
-
-
 
 outputs:
   dev:
