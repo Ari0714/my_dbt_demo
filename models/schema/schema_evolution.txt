@@ -1,6 +1,58 @@
 
 
+{{ config(materialized='table') }}
 
+WITH source_data AS (
+    SELECT 1 AS id, 'Alice' AS name
+    UNION ALL
+    SELECT 2 AS id, 'Bob' AS name
+),
+final_data AS (
+    SELECT * FROM source_data
+    UNION ALL
+    SELECT NULL AS id, NULL AS name
+    WHERE NOT EXISTS (SELECT 1 FROM source_data)
+)
+
+SELECT
+    {{ select_with_target_columns_from_list(
+        ['id','name'],  -- 源列
+        this,           -- 当前目标表
+        "'UNKNOWN'"     -- 缺列默认值
+    ) }}
+FROM final_data
+
+
+
+macros/select_with_target_columns_from_list.sql
+{% macro select_with_target_columns_from_list(src_cols, target_relation, default_value="'UNKNOWN'") %}
+{#
+    src_cols: list, 源列名，例如 ['id','name']
+    target_relation: this, 当前模型目标表
+    default_value: 目标表缺列默认值，例如 "'UNKNOWN'"
+#}
+
+{# 获取目标表列信息 #}
+{% set tgt_cols = adapter.get_columns_in_relation(target_relation) %}
+{% set tgt_col_names = tgt_cols | map(attribute='name') | list %}
+
+{# 构建 SELECT 列列表 #}
+{% set select_list = [] %}
+
+{% for col in tgt_col_names %}
+    {% if col in src_cols %}
+        {% do select_list.append(col) %}
+    {% else %}
+        {% do select_list.append(default_value ~ " AS " ~ col) %}
+    {% endif %}
+{% endfor %}
+
+{{ select_list | join(', ') }}
+{% endmacro %}
+
+
+
+------------
 macros/select_with_manifest_columns.sql
 {% macro select_with_manifest_columns(ephemeral_model_name, target_relation, default_value="'UNKNOWN'") %}
     {#
