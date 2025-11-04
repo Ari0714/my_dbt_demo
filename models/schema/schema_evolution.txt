@@ -1,5 +1,68 @@
 
 
+
+
+
+{% macro select_with_target_columns_regex(source_sql, target_relation) %}
+{#
+    自动生成 SELECT 列表，基于目标表字段补齐缺列。
+    - source_sql: 源 SQL 内容（字符串），用于正则提取列名
+    - target_relation: 目标表（this）
+#}
+
+    {# ---------- Step 1. 从源 SQL 中提取列名 ---------- #}
+    {% set clean_sql = source_sql
+        | replace('\n', ' ')
+        | replace('\r', ' ')
+        | replace('\t', ' ')
+        | regex_replace('\s+', ' ')
+    %}
+
+    {% set matches = clean_sql | regex_findall('(?is)select\\s+(.*?)\\s+from') %}
+
+    {% if matches | length == 0 %}
+        {{ exceptions.raise_compiler_error("无法在源 SQL 中找到 SELECT ... FROM 结构") }}
+    {% endif %}
+
+    {% set field_str = matches[0] %}
+    {% set field_str = field_str | regex_replace('(?i)\\sas\\s', ' ') %}
+    {% set raw_cols = field_str.split(',') %}
+    {% set src_names = [] %}
+
+    {% for c in raw_cols %}
+        {% set col_name = c.strip() %}
+        {% if ' ' in col_name %}
+            {% set col_name = col_name.split(' ') | last %}
+        {% endif %}
+        {% do src_names.append(col_name | trim) %}
+    {% endfor %}
+
+    {# ---------- Step 2. 获取目标表字段 ---------- #}
+    {% set tgt_cols = adapter.get_columns_in_relation(target_relation) %}
+    {% if tgt_cols is none %}
+        {{ exceptions.raise_compiler_error("无法获取目标表列: " ~ target_relation) }}
+    {% endif %}
+
+    {% set tgt_names = [] %}
+    {% for col in tgt_cols %}
+        {% do tgt_names.append(col.name|string) %}
+    {% endfor %}
+
+    {# ---------- Step 3. 构造 SELECT 列列表 ---------- #}
+    {% set select_list = [] %}
+    {% for col in tgt_names %}
+        {% if col in src_names %}
+            {% do select_list.append(col) %}
+        {% else %}
+            {% do select_list.append("NULL AS " ~ col) %}
+        {% endif %}
+    {% endfor %}
+
+    {{ return(select_list | join(',\n  ')) }}
+{% endmacro %}
+
+
+
 -- models/step_by_step_temp_view.sql
 {{
   config(
