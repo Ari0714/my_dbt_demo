@@ -1,5 +1,55 @@
 
 
+-- models/step_by_step_temp_view.sql
+{{
+  config(
+    materialized = 'table'
+  )
+}}
+
+-- 步骤1: 创建临时视图
+{% set create_view_sql %}
+    CREATE OR REPLACE TEMPORARY VIEW temp_product_stats AS (
+        SELECT
+            product_id,
+            category,
+            COUNT(DISTINCT user_id) as unique_buyers,
+            SUM(quantity) as total_quantity,
+            SUM(amount) as total_revenue,
+            AVG(rating) as avg_rating
+        FROM {{ ref('sales') }} s
+        JOIN {{ ref('products') }} p ON s.product_id = p.id
+        WHERE s.sale_date >= CURRENT_DATE - 90
+        GROUP BY product_id, category
+    )
+{% endset %}
+
+{% do run_query(create_view_sql) %}
+
+-- 步骤2: 使用临时视图进行复杂查询
+SELECT
+    p.product_name,
+    p.category,
+    s.unique_buyers,
+    s.total_quantity,
+    s.total_revenue,
+    s.avg_rating,
+    -- 计算衍生指标
+    s.total_revenue / NULLIF(s.unique_buyers, 0) as revenue_per_buyer,
+    s.total_quantity / NULLIF(s.unique_buyers, 0) as quantity_per_buyer,
+    -- 分类逻辑
+    CASE
+        WHEN s.avg_rating >= 4.5 THEN 'Top Rated'
+        WHEN s.avg_rating >= 4.0 THEN 'Highly Rated'
+        ELSE 'Standard'
+    END as rating_category
+FROM temp_product_stats s
+JOIN {{ ref('products') }} p ON s.product_id = p.id
+WHERE s.total_revenue > 1000
+ORDER BY s.total_revenue DESC
+
+
+-------
 {{ config(materialized='table') }}
 
 WITH source_data AS (
