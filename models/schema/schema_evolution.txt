@@ -1,6 +1,77 @@
 
 
+{% macro select_with_target_columns_from_view(source_view_name, target_relation) %}
+    {#
+      功能：
+      1. 优先从 adapter 直接获取源视图字段
+      2. 若源视图不存在（如 ephemeral），则自动创建临时视图并提取字段
+      3. 对齐目标表字段，不存在的列用 NULL AS col 补齐
+    #}
 
+    {% set src_rel = adapter.get_relation(
+        database=this.database,
+        schema=this.schema,
+        identifier=source_view_name
+    ) %}
+
+    {% if src_rel is not none %}
+        {# ✅ 直接能查到表或视图 #}
+        {% set src_cols = adapter.get_columns_in_relation(src_rel) %}
+    {% else %}
+        {# ⚙️ fallback：创建一个临时 view 来取字段 #}
+        {% set temp_view_name = 'tmp_cols_' ~ source_view_name ~ '_' ~ modules.datetime.datetime.now().strftime('%H%M%S%f') %}
+        {% set temp_sql %}
+            create or replace view {{ this.schema }}.{{ temp_view_name }} as
+            select * from {{ source_view_name }}
+        {% endset %}
+        {{ log("Creating temp view for: " ~ source_view_name, info=True) }}
+        {% do run_query(temp_sql) %}
+        {% set temp_rel = adapter.get_relation(
+            database=this.database,
+            schema=this.schema,
+            identifier=temp_view_name
+        ) %}
+        {% set src_cols = adapter.get_columns_in_relation(temp_rel) %}
+        {% set drop_sql %}
+            drop view if exists {{ this.schema }}.{{ temp_view_name }}
+        {% endset %}
+        {{ log("Dropping temp view: " ~ temp_view_name, info=True) }}
+        {% do run_query(drop_sql) %}
+    {% endif %}
+
+    {% if src_cols is none %}
+        {{ exceptions.raise_compiler_error("无法获取源视图列: " ~ source_view_name) }}
+    {% endif %}
+
+    {# 源列名列表 #}
+    {% set src_names = [] %}
+    {% for col in src_cols %}
+        {% do src_names.append(col.name|string) %}
+    {% endfor %}
+
+    {# 获取目标表字段 #}
+    {% set tgt_cols = adapter.get_columns_in_relation(target_relation) %}
+    {% set tgt_names = [] %}
+    {% for col in tgt_cols %}
+        {% do tgt_names.append(col.name|string) %}
+    {% endfor %}
+
+    {# 自动生成 select 映射列表 #}
+    {% set select_list = [] %}
+    {% for col in tgt_names %}
+        {% if col in src_names %}
+            {% do select_list.append(col) %}
+        {% else %}
+            {% do select_list.append("NULL AS " ~ col) %}
+        {% endif %}
+    {% endfor %}
+
+    {{ select_list | join(',\n  ') }}
+{% endmacro %}
+
+
+
+-----
 
 
 {% macro select_with_target_columns_regex(source_sql, target_relation) %}
