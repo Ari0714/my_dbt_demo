@@ -1,5 +1,39 @@
 
 
+{% macro create_table_and_get_cols(schema_name, table_name, create_sql) %}
+    {% set full_name = schema_name ~ '.' ~ table_name %}
+
+    {# 1️⃣ 创建表 #}
+    {% set create_stmt %}
+        CREATE OR REPLACE TABLE {{ full_name }} AS
+        {{ create_sql }}
+    {% endset %}
+    {% do run_query(create_stmt) %}
+
+    {# 2️⃣ 强制刷新 Catalog（非必须，但推荐） #}
+    {% do run_query("REFRESH TABLE " ~ full_name) %}
+
+    {# 3️⃣ 实时读取字段 #}
+    {% set describe_sql = "DESCRIBE " ~ full_name %}
+    {% set result = run_query(describe_sql) %}
+
+    {% if result is none %}
+        {{ exceptions.raise_compiler_error("无法 DESCRIBE 表: " ~ full_name) }}
+    {% endif %}
+
+    {% set cols = [] %}
+    {% for row in result %}
+        {% if row[0] not in ['# col_name', ''] %}
+            {% do cols.append(row[0]) %}
+        {% endif %}
+    {% endfor %}
+
+    {% do log("✅ 成功读取字段: " ~ (cols | join(', ')), info=True) %}
+    {{ return(cols) }}
+{% endmacro %}
+
+
+------
 
 {% macro create_and_get_columns(schema_name, table_name, create_sql) %}
     {#------------------------------------------------------
