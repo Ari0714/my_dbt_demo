@@ -1,5 +1,72 @@
 
 
+
+{% macro create_and_get_columns(schema_name, table_name, create_sql) %}
+    {#------------------------------------------------------
+      1️⃣ 定义目标表全名
+    -------------------------------------------------------#}
+    {% set full_name = schema_name ~ '.' ~ table_name %}
+    {% do log("🔧 Creating table: " ~ full_name, info=True) %}
+
+    {#------------------------------------------------------
+      2️⃣ 创建 Iceberg 表
+    -------------------------------------------------------#}
+    {% set create_stmt %}
+        CREATE OR REPLACE TABLE {{ full_name }} AS
+        {{ create_sql }}
+    {% endset %}
+    {% do run_query(create_stmt) %}
+
+    {#------------------------------------------------------
+      3️⃣ 强制刷新 Spark Catalog
+    -------------------------------------------------------#}
+    {% do run_query("REFRESH TABLE " ~ full_name) %}
+    {% do run_query("SHOW TABLES IN " ~ schema_name) %}
+
+    {#------------------------------------------------------
+      4️⃣ 尝试获取 Relation
+    -------------------------------------------------------#}
+    {% set relation = adapter.get_relation(
+        database=this.database,
+        schema=schema_name,
+        identifier=table_name
+    ) %}
+
+    {% if relation is none %}
+        {% do log("⚠️ Catalog未同步，手动构造Relation: " ~ full_name, info=True) %}
+        {% set relation = api.Relation.create(
+            database=this.database,
+            schema=schema_name,
+            identifier=table_name
+        ) %}
+    {% endif %}
+
+    {#------------------------------------------------------
+      5️⃣ 获取字段信息
+    -------------------------------------------------------#}
+    {% set cols = adapter.get_columns_in_relation(relation) %}
+    {% if not cols %}
+        {% do log("⚠️ 获取列失败，可能仍未刷新。等待1秒后重试。", info=True) %}
+        {% do run_query("REFRESH TABLE " ~ full_name) %}
+        {% set cols = adapter.get_columns_in_relation(relation) %}
+    {% endif %}
+
+    {#------------------------------------------------------
+      6️⃣ 输出结果
+    -------------------------------------------------------#}
+    {% if cols %}
+        {% do log("✅ 成功获取列: " ~ (cols | map(attribute='name') | list | join(', ')), info=True) %}
+    {% else %}
+        {% do log("❌ 仍然无法获取列: " ~ full_name, info=True) %}
+    {% endif %}
+
+    {{ return(cols) }}
+{% endmacro %}
+
+
+
+
+-----
 {% macro select_with_target_columns_from_view(source_view_name, target_relation) %}
     {#
       功能：
