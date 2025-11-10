@@ -1,0 +1,26 @@
+
+
+
+
+{{ config(materialized='table') }}
+
+SELECT *
+FROM your_source_table
+WHERE your_date_column = '{{ get_max_date("your_source_table", "your_date_column") }}'
+
+
+{% macro get_max_date(table_name, date_column) %}
+  {%- set max_date_query -%}
+    SELECT MAX({{ date_column }}) AS max_date FROM {{ table_name }}
+  {%- endset -%}
+
+  {%- set max_date_result = run_query(max_date_query) -%}
+
+  {%- if max_date_result and max_date_result.rows -%}
+    {{ return(max_date_result[0]['max_date']) }}
+  {%- else -%}
+    {{ return(null) }}
+  {%- endif -%}
+{% endmacro %}
+
+
