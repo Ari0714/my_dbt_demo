@@ -1,0 +1,57 @@
+
+
+
+----
+
+
+{% macro insert_into_history_table(
+    current_table,
+    history_suffix='_his',
+    partition_field='dt',
+    partition_value=none
+) %}
+
+
+
+{% macro insert_into_history_table(
+    current_table,
+    history_suffix='_his',
+    partition_field='dt',
+    partition_value=none
+) %}
+
+{%- set history_table = current_table + history_suffix -%}
+{%- set partition_value = partition_value or run_started_at.strftime('%Y%m%d') -%}
+
+-- 1. 创建历史表（如果不存在）
+{% set create_history_table %}
+create table if not exists {{ target.schema }}.{{ history_table }}
+as select * from {{ ref(current_table) }} where 1=0;
+{% endset %}
+
+{% do run_query(create_history_table) %}
+
+-- 2. 删除已存在的分区（避免重复）
+{% set drop_partition %}
+alter table {{ target.schema }}.{{ history_table }}
+drop partition if exists ({{ partition_field }} = '{{ partition_value }}')
+{% endset %}
+
+{% do run_query(drop_partition) %}
+
+-- 3. 插入当前数据到历史表
+{% set insert_into_history %}
+insert into {{ target.schema }}.{{ history_table }}
+select
+    *,
+    '{{ partition_value }}' as {{ partition_field }},
+    current_timestamp as _load_timestamp
+from {{ ref(current_table) }}
+{% endset %}
+
+{% do run_query(insert_into_history) %}
+
+-- 记录日志
+{{ log("Successfully inserted data into history table: " ~ history_table, info=true) }}
+
+{% endmacro %}
